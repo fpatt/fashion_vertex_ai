@@ -1,0 +1,1 @@
+# Fashion MNIST on Google Gemini Enterprise Agent Platform
