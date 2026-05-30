@@ -1,0 +1,157 @@
+# PIPELINE DEFINITION
+# Name: fashion-mnist-pipeline
+# Inputs:
+#    bucket_name: str
+#    data_path: str
+components:
+  comp-download-and-preprocess:
+    executorLabel: exec-download-and-preprocess
+    inputDefinitions:
+      parameters:
+        bucket_name:
+          parameterType: STRING
+        output_path:
+          parameterType: STRING
+  comp-train-fashion-mnist:
+    executorLabel: exec-train-fashion-mnist
+    inputDefinitions:
+      parameters:
+        bucket_name:
+          parameterType: STRING
+        data_path:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        model_output_uri:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-download-and-preprocess:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - download_and_preprocess
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'tensorflow'\
+          \ 'numpy' 'google-cloud-storage'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef download_and_preprocess(bucket_name: str, output_path: str):\n\
+          \    import tensorflow as tf\n    import numpy as np\n    from google.cloud\
+          \ import storage\n    import os\n\n    print(\"--- Data Download and Preprocessing\
+          \ ---\")\n\n    # Load data\n    (X_train, y_train), (X_test, y_test) =\
+          \ tf.keras.datasets.fashion_mnist.load_data()\n    X_train, X_test = X_train\
+          \ / 255.0, X_test / 255.0\n\n    # Temporary stored data in the container\n\
+          \    np.save(\"X_train.npy\", X_train)\n    np.save(\"y_train.npy\", y_train)\n\
+          \    np.save(\"X_test.npy\", X_test)\n    np.save(\"y_test.npy\", y_test)\n\
+          \n    # Send the saved data to the Cloud Storage Bucket\n    client = storage.Client()\n\
+          \    bucket = client.bucket(bucket_name)\n\n    for filename in [\"X_train.npy\"\
+          , \"y_train.npy\", \"X_test.npy\", \"y_test.npy\"]:\n        blob = bucket.blob(os.path.join(output_path,\
+          \ filename))\n        blob.upload_from_filename(filename)\n\n    print(\"\
+          Data preparation completed and uploaded to GCS!\")\n\n"
+        image: python:3.10
+    exec-train-fashion-mnist:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_fashion_mnist
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'tensorflow'\
+          \ 'numpy' 'google-cloud-storage'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_fashion_mnist(bucket_name: str, data_path: str, model_output_uri:\
+          \ dsl.Output[dsl.Model]):\n    import tensorflow as tf\n    import numpy\
+          \ as np\n    from google.cloud import storage\n    import os\n\n    # Access\
+          \ the stored data in bucket\n\n    # Connect to the Google Cloud System\
+          \ (GCS)\n    client = storage.Client()\n    bucket = client.bucket(bucket_name)\n\
+          \    for filename in [\"X_train.npy\", \"y_train.npy\"]:\n        blob =\
+          \ bucket.blob(os.path.join(data_path, filename))\n        blob.download_to_filename(filename)\n\
+          \    X_train = np.load(\"X_train.npy\")\n    y_train = np.load(\"y_train.npy\"\
+          )\n\n    # Create a model (same as the local version)\n    model = tf.keras.models.Sequential([\n\
+          \        tf.keras.layers.Flatten(input_shape=(28, 28)),\n        tf.keras.layers.Dense(128,\
+          \ activation=\"relu\"),\n        tf.keras.layers.Dense(10, activation=\"\
+          softmax\")\n    ])\n    model.compile(\n        optimizer=\"adam\",\n  \
+          \      loss=\"sparse_categorical_crossentropy\",\n        metrics=[\"accuracy\"\
+          ]\n    )\n    model.fit(X_train, y_train, epochs=3)\n\n    os.makedirs(model_output_uri.path,\
+          \ exist_ok=True)\n    model.save(os.path.join(model_output_uri.path, \"\
+          model.keras\"))\n    print(\"Model trained and output artifact paths registered!\"\
+          )\n\n"
+        image: python:3.10
+pipelineInfo:
+  name: fashion-mnist-pipeline
+root:
+  dag:
+    tasks:
+      download-and-preprocess:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-download-and-preprocess
+        inputs:
+          parameters:
+            bucket_name:
+              componentInputParameter: bucket_name
+            output_path:
+              componentInputParameter: data_path
+        taskInfo:
+          name: download-and-preprocess
+      train-fashion-mnist:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-fashion-mnist
+        dependentTasks:
+        - download-and-preprocess
+        inputs:
+          parameters:
+            bucket_name:
+              componentInputParameter: bucket_name
+            data_path:
+              componentInputParameter: data_path
+        taskInfo:
+          name: train-fashion-mnist
+  inputDefinitions:
+    parameters:
+      bucket_name:
+        parameterType: STRING
+      data_path:
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.16.1
