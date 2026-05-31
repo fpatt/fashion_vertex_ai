@@ -1,5 +1,6 @@
 # PIPELINE DEFINITION
 # Name: fashion-mnist-pipeline
+# Description: An end-to-end pipeline with Model Registry incorporation
 # Inputs:
 #    bucket_name: str
 #    data_path: str
@@ -10,7 +11,7 @@ components:
       parameters:
         bucket_name:
           parameterType: STRING
-        output_path:
+        data_path:
           parameterType: STRING
   comp-train-fashion-mnist:
     executorLabel: exec-train-fashion-mnist
@@ -26,6 +27,21 @@ components:
           artifactType:
             schemaTitle: system.Model
             schemaVersion: 0.0.1
+  comp-upload-model-to-registry:
+    executorLabel: exec-upload-model-to-registry
+    inputDefinitions:
+      artifacts:
+        model_artifact:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+      parameters:
+        display_name:
+          parameterType: STRING
+        location:
+          parameterType: STRING
+        project:
+          parameterType: STRING
 deploymentSpec:
   executors:
     exec-download-and-preprocess:
@@ -55,7 +71,7 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef download_and_preprocess(bucket_name: str, output_path: str):\n\
+          \ *\n\ndef download_and_preprocess(bucket_name: str, data_path: str):\n\
           \    import tensorflow as tf\n    import numpy as np\n    from google.cloud\
           \ import storage\n    import os\n\n    print(\"--- Data Download and Preprocessing\
           \ ---\")\n\n    # Load data\n    (X_train, y_train), (X_test, y_test) =\
@@ -65,7 +81,7 @@ deploymentSpec:
           \    np.save(\"X_test.npy\", X_test)\n    np.save(\"y_test.npy\", y_test)\n\
           \n    # Send the saved data to the Cloud Storage Bucket\n    client = storage.Client()\n\
           \    bucket = client.bucket(bucket_name)\n\n    for filename in [\"X_train.npy\"\
-          , \"y_train.npy\", \"X_test.npy\", \"y_test.npy\"]:\n        blob = bucket.blob(os.path.join(output_path,\
+          , \"y_train.npy\", \"X_test.npy\", \"y_test.npy\"]:\n        blob = bucket.blob(os.path.join(data_path,\
           \ filename))\n        blob.upload_from_filename(filename)\n\n    print(\"\
           Data preparation completed and uploaded to GCS!\")\n\n"
         image: python:3.10
@@ -96,16 +112,17 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef train_fashion_mnist(bucket_name: str, data_path: str, model_output_uri:\
-          \ dsl.Output[dsl.Model]):\n    import tensorflow as tf\n    import numpy\
-          \ as np\n    from google.cloud import storage\n    import os\n\n    # Access\
-          \ the stored data in bucket\n\n    # Connect to the Google Cloud System\
-          \ (GCS)\n    client = storage.Client()\n    bucket = client.bucket(bucket_name)\n\
-          \    for filename in [\"X_train.npy\", \"y_train.npy\"]:\n        blob =\
-          \ bucket.blob(os.path.join(data_path, filename))\n        blob.download_to_filename(filename)\n\
-          \    X_train = np.load(\"X_train.npy\")\n    y_train = np.load(\"y_train.npy\"\
-          )\n\n    # Create a model (same as the local version)\n    model = tf.keras.models.Sequential([\n\
-          \        tf.keras.layers.Flatten(input_shape=(28, 28)),\n        tf.keras.layers.Dense(128,\
+          \ *\n\ndef train_fashion_mnist(\n    bucket_name: str, \n    data_path:\
+          \ str, \n    model_output_uri: Output[Model]\n):\n    import tensorflow\
+          \ as tf\n    import numpy as np\n    from google.cloud import storage\n\
+          \    import os\n\n    # Access the stored data in bucket\n\n    # Connect\
+          \ to the Google Cloud System (GCS)\n    client = storage.Client()\n    bucket\
+          \ = client.bucket(bucket_name)\n    for filename in [\"X_train.npy\", \"\
+          y_train.npy\"]:\n        blob = bucket.blob(os.path.join(data_path, filename))\n\
+          \        blob.download_to_filename(filename)\n    X_train = np.load(\"X_train.npy\"\
+          )\n    y_train = np.load(\"y_train.npy\")\n\n    # Create a model (same\
+          \ as the local version)\n    model = tf.keras.models.Sequential([\n    \
+          \    tf.keras.layers.Flatten(input_shape=(28, 28)),\n        tf.keras.layers.Dense(128,\
           \ activation=\"relu\"),\n        tf.keras.layers.Dense(10, activation=\"\
           softmax\")\n    ])\n    model.compile(\n        optimizer=\"adam\",\n  \
           \      loss=\"sparse_categorical_crossentropy\",\n        metrics=[\"accuracy\"\
@@ -114,7 +131,47 @@ deploymentSpec:
           model.keras\"))\n    print(\"Model trained and output artifact paths registered!\"\
           )\n\n"
         image: python:3.10
+    exec-upload-model-to-registry:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - upload_model_to_registry
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'google-cloud-aiplatform'\
+          \  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef upload_model_to_registry(\n    project: str,\n    location: str,\n\
+          \    display_name: str,\n    model_artifact: dsl.Input[dsl.Model]\n):\n\
+          \    from google.cloud import aiplatform\n\n    print(f\"Initializing AI\
+          \ Platform for project: {project} at {location}\")\n    aiplatform.init(project=project,\
+          \ location=location)\n\n    gcs_model_uri = model_artifact.uri\n    print(f\"\
+          Automated uploading model from GCS Path: {gcs_model_uri}\")\n\n    uploaded_model\
+          \ = aiplatform.Model.upload(\n        display_name=display_name,\n     \
+          \   artifact_uri=gcs_model_uri,\n        serving_container_image_uri=\"\
+          us-docker.pkg.dev/vertex-ai/prediction/custom-container-predict:latest\"\
+          \n    )\n    print(f\"Successfully registered model! Resource Name: {uploaded_model.resource_name}\"\
+          )\n\n"
+        image: python:3.10
 pipelineInfo:
+  description: An end-to-end pipeline with Model Registry incorporation
   name: fashion-mnist-pipeline
 root:
   dag:
@@ -128,7 +185,7 @@ root:
           parameters:
             bucket_name:
               componentInputParameter: bucket_name
-            output_path:
+            data_path:
               componentInputParameter: data_path
         taskInfo:
           name: download-and-preprocess
@@ -147,6 +204,31 @@ root:
               componentInputParameter: data_path
         taskInfo:
           name: train-fashion-mnist
+      upload-model-to-registry:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-upload-model-to-registry
+        dependentTasks:
+        - train-fashion-mnist
+        inputs:
+          artifacts:
+            model_artifact:
+              taskOutputArtifact:
+                outputArtifactKey: model_output_uri
+                producerTask: train-fashion-mnist
+          parameters:
+            display_name:
+              runtimeValue:
+                constant: fashion-mnist-model-registry
+            location:
+              runtimeValue:
+                constant: asia-southeast1
+            project:
+              runtimeValue:
+                constant: fashion-mnist-cloud
+        taskInfo:
+          name: upload-model-to-registry
   inputDefinitions:
     parameters:
       bucket_name:

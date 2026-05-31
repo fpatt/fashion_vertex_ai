@@ -3,7 +3,7 @@ from google.cloud import aiplatform
 
 
 def trigger_vertex_pipeline():
-    print("--- [1/3] Initializing Connection to Google Cloud Platform ---")
+    print("\n--- [1/3] Initializing Connection to Google Cloud Platform ---")
 
     PROJECT_ID = "fashion-mnist-cloud"
     REGION = "asia-southeast1"
@@ -12,7 +12,7 @@ def trigger_vertex_pipeline():
     aiplatform.init(project=PROJECT_ID, location=REGION)    
     print(f"Connected to Project: {PROJECT_ID} at region: {REGION}")
 
-    print("--- [2/3] Preparing Pipeline Job from Blueprint ---")
+    print("\n--- [2/3] Preparing Pipeline Job from Blueprint ---")
     
     pipeline_job = aiplatform.PipelineJob(
         display_name="fashion_mnist_vertex_run",
@@ -22,13 +22,13 @@ def trigger_vertex_pipeline():
             "bucket_name": BUCKET_NAME,
             "data_path": "fashion_mnist_data"
         },
-        enable_caching=True
+        enable_caching=False
     )
 
     print("Pipeline job configuration loaded successfully.")
-    print("--- [3/3] Launching Pipeline Blueprint to Vertex AI ---")
+    print("\n--- [3/3] Launching Pipeline Blueprint to Vertex AI ---")
 
-    pipeline_job.run(sync=False)
+    pipeline_job.run()
 
     print("\nMission Launched! The pipeline is now running serverless on Google Cloud.")
     print("You can close this terminal and monitor the progress via the Vertex AI Web Console.")
