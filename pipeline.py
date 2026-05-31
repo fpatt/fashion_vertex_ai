@@ -3,11 +3,20 @@ from kfp import dsl, compiler
 from kfp.dsl import Output, Model
 
 
+REGION = "asia-southeast1"
+PROJECT_ID = "fashion-mnist-cloud"
+REPO_NAME = "fashion-mnist-repo"
+IMAGE_NAME = "fastapi-predictor"
+IMAGE_TAG = "v4"
+SERVING_IMAGE_URI = f"{REGION}-docker.pkg.dev/{PROJECT_ID}/{REPO_NAME}/{IMAGE_NAME}:{IMAGE_TAG}"
+print(SERVING_IMAGE_URI)
+
+
 # =====================================================================
 # Component 1: Data Preprocess
 # =====================================================================
 @dsl.component(
-    base_image="python:3.10",
+    base_image="python:3.13",
     packages_to_install=["tensorflow", "numpy", "google-cloud-storage"]
 )
 def download_and_preprocess(bucket_name: str, data_path: str):
@@ -43,7 +52,7 @@ def download_and_preprocess(bucket_name: str, data_path: str):
 # Component 2: Model Training
 # =====================================================================
 @dsl.component(
-    base_image="python:3.10",
+    base_image="python:3.13",
     packages_to_install=["tensorflow", "numpy", "google-cloud-storage"]
 )
 def train_fashion_mnist(
@@ -89,14 +98,15 @@ def train_fashion_mnist(
 # Component 3: Automate model registration with `.keras` support
 # =====================================================================
 @dsl.component(
-    base_image="python:3.10",
+    base_image="python:3.13",
     packages_to_install=["google-cloud-aiplatform"]
 )
 def upload_model_to_registry(
     project: str,
     location: str,
     display_name: str,
-    model_artifact: dsl.Input[dsl.Model]
+    model_artifact: dsl.Input[dsl.Model],
+    serving_container_image_uri: str
 ):
     from google.cloud import aiplatform
     from google.cloud.aiplatform import Model
@@ -119,7 +129,7 @@ def upload_model_to_registry(
     uploaded_model = aiplatform.Model.upload(
         display_name=display_name,
         artifact_uri=gcs_model_uri,
-        serving_container_image_uri="us-docker.pkg.dev/vertex-ai/prediction/custom-container-predict:latest",
+        serving_container_image_uri=serving_container_image_uri,
         parent_model=parent_model
     )
     print(f"Successfully registered model! Resource Name: {uploaded_model.resource_name}")
@@ -149,7 +159,8 @@ def fashion_mnist_pipeline(bucket_name: str, data_path: str):
         project="fashion-mnist-cloud",
         location="asia-southeast1",
         display_name="fashion-mnist-model-registry",
-        model_artifact=train_task.outputs["model_output_uri"] 
+        model_artifact=train_task.outputs["model_output_uri"],
+        serving_container_image_uri=SERVING_IMAGE_URI
     )
     # [download_and_preprocess] -> [train_fasion_mnist] -> [upload_model_to_registry]
     model_upload_task.after(train_task)

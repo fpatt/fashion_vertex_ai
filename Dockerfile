@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.13-slim
 WORKDIR /app
 RUN pip install --no-cache-dir \
     google-cloud-storage \
@@ -7,4 +7,4 @@ RUN pip install --no-cache-dir \
     "uvicorn[standard]"
 COPY predictor.py /app/predictor.py
 EXPOSE 8080
-CMD ["python", "predictor.py"]
+CMD ["uvicorn", "predictor.py:app", "--host", "0.0.0.0", "--port", "8080"]
