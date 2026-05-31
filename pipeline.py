@@ -99,17 +99,28 @@ def upload_model_to_registry(
     model_artifact: dsl.Input[dsl.Model]
 ):
     from google.cloud import aiplatform
+    from google.cloud.aiplatform import Model
 
     print(f"Initializing AI Platform for project: {project} at {location}")
     aiplatform.init(project=project, location=location)
 
+    print("Checking for existing model versions in Model Registry...")
     gcs_model_uri = model_artifact.uri
+    model_list = Model.list(filter=f'display_name="{display_name}"', order_by="create_time desc")
+    parent_model = None
+    if model_list:
+        parent_model = model_list[0].resource_name
+        print(f"Found existing model. Registering as a new version under parent: {parent_model}")
+    else:
+        print("No existing model found with this display name. Creating a new parent mode asset.")
+
     print(f"Automated uploading model from GCS Path: {gcs_model_uri}")
     
     uploaded_model = aiplatform.Model.upload(
         display_name=display_name,
         artifact_uri=gcs_model_uri,
-        serving_container_image_uri="us-docker.pkg.dev/vertex-ai/prediction/custom-container-predict:latest"
+        serving_container_image_uri="us-docker.pkg.dev/vertex-ai/prediction/custom-container-predict:latest",
+        parent_model=parent_model
     )
     print(f"Successfully registered model! Resource Name: {uploaded_model.resource_name}")
 
