@@ -5,6 +5,8 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "docker>=7.1.0",
+    "fastapi[standard]>=0.136.3",
     "google-cloud-aiplatform>=1.154.0",
     "jupyter>=1.1.1",
     "kfp>=2.16.1",
