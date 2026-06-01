@@ -7,7 +7,7 @@ REGION = "asia-southeast1"
 PROJECT_ID = "fashion-mnist-cloud"
 REPO_NAME = "fashion-mnist-repo"
 IMAGE_NAME = "fastapi-predictor"
-IMAGE_TAG = "v4"
+IMAGE_TAG = "v9"
 SERVING_IMAGE_URI = f"{REGION}-docker.pkg.dev/{PROJECT_ID}/{REPO_NAME}/{IMAGE_NAME}:{IMAGE_TAG}"
 print(SERVING_IMAGE_URI)
 
@@ -130,7 +130,9 @@ def upload_model_to_registry(
         display_name=display_name,
         artifact_uri=gcs_model_uri,
         serving_container_image_uri=serving_container_image_uri,
-        parent_model=parent_model
+        parent_model=parent_model,
+        serving_container_health_route="/health",
+        serving_container_predict_route="/predict"
     )
     print(f"Successfully registered model! Resource Name: {uploaded_model.resource_name}")
 
