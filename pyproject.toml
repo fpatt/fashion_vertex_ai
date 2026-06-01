@@ -11,5 +11,6 @@ dependencies = [
     "jupyter>=1.1.1",
     "kfp>=2.16.1",
     "pandas>=3.0.3",
+    "pillow>=12.2.0",
     "tensorflow>=2.21.0",
 ]
