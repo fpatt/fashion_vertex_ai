@@ -86,7 +86,7 @@ deploymentSpec:
           , \"y_train.npy\", \"X_test.npy\", \"y_test.npy\"]:\n        blob = bucket.blob(os.path.join(data_path,\
           \ filename))\n        blob.upload_from_filename(filename)\n\n    print(\"\
           Data preparation completed and uploaded to GCS!\")\n\n"
-        image: python:3.10
+        image: python:3.13
     exec-train-fashion-mnist:
       container:
         args:
@@ -132,7 +132,7 @@ deploymentSpec:
           \ exist_ok=True)\n    model.save(os.path.join(model_output_uri.path, \"\
           model.keras\"))\n    print(\"Model trained and output artifact paths registered!\"\
           )\n\n"
-        image: python:3.10
+        image: python:3.13
     exec-upload-model-to-registry:
       container:
         args:
@@ -176,9 +176,11 @@ deploymentSpec:
           \ from GCS Path: {gcs_model_uri}\")\n\n    uploaded_model = aiplatform.Model.upload(\n\
           \        display_name=display_name,\n        artifact_uri=gcs_model_uri,\n\
           \        serving_container_image_uri=serving_container_image_uri,\n    \
-          \    parent_model=parent_model\n    )\n    print(f\"Successfully registered\
-          \ model! Resource Name: {uploaded_model.resource_name}\")\n\n"
-        image: python:3.10
+          \    parent_model=parent_model,\n        serving_container_health_route=\"\
+          /health\",\n        serving_container_predict_route=\"/predict\"\n    )\n\
+          \    print(f\"Successfully registered model! Resource Name: {uploaded_model.resource_name}\"\
+          )\n\n"
+        image: python:3.13
 pipelineInfo:
   description: An end-to-end pipeline with Model Registry incorporation
   name: fashion-mnist-pipeline
@@ -238,7 +240,7 @@ root:
                 constant: fashion-mnist-cloud
             serving_container_image_uri:
               runtimeValue:
-                constant: asia-southeast1-docker.pkg.dev/fashion-mnist-cloud/fashion-mnist-repo/fastapi-predictor:v4
+                constant: asia-southeast1-docker.pkg.dev/fashion-mnist-cloud/fashion-mnist-repo/fastapi-predictor:v9
         taskInfo:
           name: upload-model-to-registry
   inputDefinitions:

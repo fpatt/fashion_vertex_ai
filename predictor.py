@@ -33,8 +33,12 @@ model = tf.keras.models.load_model(local_model_path)
 print("Model loaded successfully into FastAPI container!")
 
 
+@app.get("/v1/endpoints/{endpoint_id}/deployedModels/{deployed_model_id}")
+def vertex_health_check(endpoint_id: str, deployed_model_id: str):
+    return {"status": "healthy"}
+
 @app.get("/health")
-def health_check():
+def general_health_check():
     return {"status": "health"}
 
 @app.post("/predict")
