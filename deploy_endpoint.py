@@ -11,7 +11,7 @@ ENDPOINT_DISPLAY_NAME = "fashion-mnist-endpoint-v5"
 
 REPO_NAME = "fashion-mnist-repo"
 IMAGE_NAME = "fastapi-predictor"
-IMAGE_TAG = "v9"
+IMAGE_TAG = "v10"
 SERVING_IMAGE_URI = f"{REGION}-docker.pkg.dev/{PROJECT_ID}/{REPO_NAME}/{IMAGE_NAME}:{IMAGE_TAG}"
 
 

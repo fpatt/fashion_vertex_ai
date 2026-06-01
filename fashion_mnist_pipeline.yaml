@@ -77,11 +77,14 @@ deploymentSpec:
           \    import tensorflow as tf\n    import numpy as np\n    from google.cloud\
           \ import storage\n    import os\n\n    print(\"--- Data Download and Preprocessing\
           \ ---\")\n\n    # Load data\n    (X_train, y_train), (X_test, y_test) =\
-          \ tf.keras.datasets.fashion_mnist.load_data()\n    X_train, X_test = X_train\
-          \ / 255.0, X_test / 255.0\n\n    # Temporary stored data in the container\n\
-          \    np.save(\"X_train.npy\", X_train)\n    np.save(\"y_train.npy\", y_train)\n\
-          \    np.save(\"X_test.npy\", X_test)\n    np.save(\"y_test.npy\", y_test)\n\
-          \n    # Send the saved data to the Cloud Storage Bucket\n    client = storage.Client()\n\
+          \ tf.keras.datasets.fashion_mnist.load_data()\n\n    # Normalized pixel\
+          \ values\n    X_train, X_test = X_train / 255.0, X_test / 255.0\n\n    #\
+          \ Reshape to include the single channel (Grayscale) dimension (-1, 28, 28,\
+          \ 1)\n    X_train = X_train.reshape(-1, 28, 28, 1)\n    X_test = X_test.reshape(-1,\
+          \ 28, 28, 1)\n\n    # Temporary stored data in the container\n    np.save(\"\
+          X_train.npy\", X_train)\n    np.save(\"y_train.npy\", y_train)\n    np.save(\"\
+          X_test.npy\", X_test)\n    np.save(\"y_test.npy\", y_test)\n\n    # Send\
+          \ the saved data to the Cloud Storage Bucket\n    client = storage.Client()\n\
           \    bucket = client.bucket(bucket_name)\n\n    for filename in [\"X_train.npy\"\
           , \"y_train.npy\", \"X_test.npy\", \"y_test.npy\"]:\n        blob = bucket.blob(os.path.join(data_path,\
           \ filename))\n        blob.upload_from_filename(filename)\n\n    print(\"\
@@ -120,18 +123,24 @@ deploymentSpec:
           \    import os\n\n    # Access the stored data in bucket\n\n    # Connect\
           \ to the Google Cloud System (GCS)\n    client = storage.Client()\n    bucket\
           \ = client.bucket(bucket_name)\n    for filename in [\"X_train.npy\", \"\
-          y_train.npy\"]:\n        blob = bucket.blob(os.path.join(data_path, filename))\n\
-          \        blob.download_to_filename(filename)\n    X_train = np.load(\"X_train.npy\"\
-          )\n    y_train = np.load(\"y_train.npy\")\n\n    # Create a model (same\
-          \ as the local version)\n    model = tf.keras.models.Sequential([\n    \
-          \    tf.keras.layers.Flatten(input_shape=(28, 28)),\n        tf.keras.layers.Dense(128,\
-          \ activation=\"relu\"),\n        tf.keras.layers.Dense(10, activation=\"\
-          softmax\")\n    ])\n    model.compile(\n        optimizer=\"adam\",\n  \
-          \      loss=\"sparse_categorical_crossentropy\",\n        metrics=[\"accuracy\"\
-          ]\n    )\n    model.fit(X_train, y_train, epochs=3)\n\n    os.makedirs(model_output_uri.path,\
-          \ exist_ok=True)\n    model.save(os.path.join(model_output_uri.path, \"\
-          model.keras\"))\n    print(\"Model trained and output artifact paths registered!\"\
-          )\n\n"
+          y_train.npy\", \"X_test.npy\", \"y_test.npy\"]:\n        blob = bucket.blob(os.path.join(data_path,\
+          \ filename))\n        blob.download_to_filename(filename)\n    X_train =\
+          \ np.load(\"X_train.npy\")\n    y_train = np.load(\"y_train.npy\")\n   \
+          \ X_test = np.load(\"X_test.npy\")\n    y_test = np.load(\"y_test.npy\"\
+          )\n\n    # Define the upgraded CNN architecture\n    model = tf.keras.Sequential([\n\
+          \        tf.keras.layers.Conv2D(32, (3,3), activation='relu', input_shape=(28,28,1)),\n\
+          \        tf.keras.layers.MaxPool2D(),\n        tf.keras.layers.Conv2D(64,\
+          \ (3,3), activation='relu'),\n        tf.keras.layers.MaxPool2D(),\n   \
+          \     tf.keras.layers.Flatten(),\n        tf.keras.layers.Dense(128, activation='relu'),\n\
+          \        tf.keras.layers.Dense(10, activation='softmax')\n    ])\n\n   \
+          \ model.compile(\n        optimizer=\"adam\",\n        loss=\"sparse_categorical_crossentropy\"\
+          ,\n        metrics=[\"accuracy\"]\n    )\n\n    # Train with validation\
+          \ tracking for better monitoring integration\n    model.fit(\n        X_train,\
+          \ \n        y_train, \n        epochs=5, \n        validation_data=(X_test,\
+          \ y_test)\n    )\n\n    # Save artifact in the designated KFP output route\n\
+          \    os.makedirs(model_output_uri.path, exist_ok=True)\n    model.save(os.path.join(model_output_uri.path,\
+          \ \"model.keras\"))\n    print(\"Model trained and output artifact paths\
+          \ registered!\")\n\n"
         image: python:3.13
     exec-upload-model-to-registry:
       container:
@@ -240,7 +249,7 @@ root:
                 constant: fashion-mnist-cloud
             serving_container_image_uri:
               runtimeValue:
-                constant: asia-southeast1-docker.pkg.dev/fashion-mnist-cloud/fashion-mnist-repo/fastapi-predictor:v9
+                constant: asia-southeast1-docker.pkg.dev/fashion-mnist-cloud/fashion-mnist-repo/fastapi-predictor:v10
         taskInfo:
           name: upload-model-to-registry
   inputDefinitions:

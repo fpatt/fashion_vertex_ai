@@ -37,14 +37,23 @@ print("Model loaded successfully into FastAPI container!")
 def vertex_health_check(endpoint_id: str, deployed_model_id: str):
     return {"status": "healthy"}
 
+
 @app.get("/health")
 def general_health_check():
     return {"status": "health"}
 
+
 @app.post("/predict")
 def predict(data: PredictionInput):
     inputs = np.array(data.instances, dtype=np.float32)
-    predictions = model.predict(inputs)
-    predicted_classes = np.argmax(predictions, axis=1).tolist()
+    
+    # Reshape input to match CNN shape: (Batch, 28, 28, 1)
+    if inputs.ndim == 3:
+        inputs = np.expand_dims(inputs, axis=-1)
+    elif inputs.ndim == 2:
+        inputs = inputs.reshape(-1, 28, 28, 1)
 
-    return {"predictions": predicted_classes}
+    predictions = model.predict(inputs)
+    
+    # Return full probabilities for all 10 classes as a list
+    return {"predictions": predictions.tolist()}
