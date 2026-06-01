@@ -7,13 +7,13 @@ from google.cloud import aiplatform
 # ==========================================
 REGION = "asia-southeast1"
 PROJECT_ID = "fashion-mnist-cloud"            
-ENDPOINT_ID = "336699047727333376"
+ENDPOINT_ID = "6012923428074422272"
 
 # Fashion-MNIST class labels
 CLASS_NAMES = ['T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat',
                'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot']
 
-TEST_IMG_PATH = "images/shoes1.jpg"
+TEST_IMG_PATH = "images/travel-bag-canvas-green-beige.jpg"
 
 # ==========================================
 # 2. Image Preprocessing
@@ -45,16 +45,21 @@ def predict_fashion():
     instances = preprocess_image(TEST_IMG_PATH)
     
     print("Sending prediction request to Vertex AI Endpoint...")
-    print("Sending prediction request to Vertex AI Endpoint...")
     response = endpoint.predict(instances=instances)
+    print(f"Response: {response}")
+
+    # Extract prediction probabilities
+    predictions = response.predictions[0]
     
-    # Since the response predictions is just a single float, we handle it directly
-    confidence_value = response.predictions[0]
-    
-    confidence = confidence_value * 100 if confidence_value <= 1.0 else confidence_value
+    # Identify the class with the highest probability
+    predicted_class_idx = np.argmax(predictions)
+    print(predicted_class_idx)
+    predicted_label = CLASS_NAMES[predicted_class_idx]
+    confidence = predictions[predicted_class_idx] * 100
 
     print("\n--- [ Prediction Results ] ---")
-    print(f"Confidence Score: {confidence:.2f}%")
+    print(f"Predicted Class: {predicted_label}")
+    print(f"Confidence: {confidence:.2f}%")
     print("------------------------------")
 
 if __name__ == "__main__":

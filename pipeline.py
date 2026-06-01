@@ -1,4 +1,5 @@
 import os
+import tensorflow as tf
 from kfp import dsl, compiler
 from kfp.dsl import Output, Model
 
@@ -7,7 +8,7 @@ REGION = "asia-southeast1"
 PROJECT_ID = "fashion-mnist-cloud"
 REPO_NAME = "fashion-mnist-repo"
 IMAGE_NAME = "fastapi-predictor"
-IMAGE_TAG = "v9"
+IMAGE_TAG = "v10"
 SERVING_IMAGE_URI = f"{REGION}-docker.pkg.dev/{PROJECT_ID}/{REPO_NAME}/{IMAGE_NAME}:{IMAGE_TAG}"
 print(SERVING_IMAGE_URI)
 
@@ -29,7 +30,13 @@ def download_and_preprocess(bucket_name: str, data_path: str):
 
     # Load data
     (X_train, y_train), (X_test, y_test) = tf.keras.datasets.fashion_mnist.load_data()
+
+    # Normalized pixel values
     X_train, X_test = X_train / 255.0, X_test / 255.0
+
+    # Reshape to include the single channel (Grayscale) dimension (-1, 28, 28, 1)
+    X_train = X_train.reshape(-1, 28, 28, 1)
+    X_test = X_test.reshape(-1, 28, 28, 1)
 
     # Temporary stored data in the container
     np.save("X_train.npy", X_train)
@@ -70,25 +77,40 @@ def train_fashion_mnist(
     # Connect to the Google Cloud System (GCS)
     client = storage.Client()
     bucket = client.bucket(bucket_name)
-    for filename in ["X_train.npy", "y_train.npy"]:
+    for filename in ["X_train.npy", "y_train.npy", "X_test.npy", "y_test.npy"]:
         blob = bucket.blob(os.path.join(data_path, filename))
         blob.download_to_filename(filename)
     X_train = np.load("X_train.npy")
     y_train = np.load("y_train.npy")
+    X_test = np.load("X_test.npy")
+    y_test = np.load("y_test.npy")
 
-    # Create a model (same as the local version)
-    model = tf.keras.models.Sequential([
-        tf.keras.layers.Flatten(input_shape=(28, 28)),
-        tf.keras.layers.Dense(128, activation="relu"),
-        tf.keras.layers.Dense(10, activation="softmax")
+    # Define the upgraded CNN architecture
+    model = tf.keras.Sequential([
+        tf.keras.layers.Conv2D(32, (3,3), activation='relu', input_shape=(28,28,1)),
+        tf.keras.layers.MaxPool2D(),
+        tf.keras.layers.Conv2D(64, (3,3), activation='relu'),
+        tf.keras.layers.MaxPool2D(),
+        tf.keras.layers.Flatten(),
+        tf.keras.layers.Dense(128, activation='relu'),
+        tf.keras.layers.Dense(10, activation='softmax')
     ])
+    
     model.compile(
         optimizer="adam",
         loss="sparse_categorical_crossentropy",
         metrics=["accuracy"]
     )
-    model.fit(X_train, y_train, epochs=3)
+    
+    # Train with validation tracking for better monitoring integration
+    model.fit(
+        X_train, 
+        y_train, 
+        epochs=5, 
+        validation_data=(X_test, y_test)
+    )
 
+    # Save artifact in the designated KFP output route
     os.makedirs(model_output_uri.path, exist_ok=True)
     model.save(os.path.join(model_output_uri.path, "model.keras"))
     print("Model trained and output artifact paths registered!")
