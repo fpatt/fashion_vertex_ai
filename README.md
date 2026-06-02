@@ -30,8 +30,8 @@ The workflow is orchestrated using a Google Cloud Service Account with restricte
 
 ## Getting Started
 
-### Prerequisites
-    Before running any scripts, install the Google Cloud CLI and authenticate your local environment with your GCP account:
+0. Prerequisites
+Before running any scripts, install the Google Cloud CLI and authenticate your local environment with your GCP account:
 
     ```bash
     # Authenticate your Google Cloud account
@@ -44,8 +44,8 @@ The workflow is orchestrated using a Google Cloud Service Account with restricte
     gcloud config set project <PROJECT_ID>
     ```
 
-### Compile the Pipeline Blueprint
-    Compile the end-to-end orchestrated pipeline into a deployable YAML configuration file:
+1. Compile the Pipeline Blueprint
+Compile the end-to-end orchestrated pipeline into a deployable YAML configuration file:
 
     ```bash
     python pipeline.py
